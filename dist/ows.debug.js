@@ -12,7 +12,7 @@
 
 var Ows4js = {};
 
-Ows4js.version = '0.1.2';
+Ows4js.version = '0.1.5';
 
 Ows4js.Ows = {};
 Ows4js.Fes = {};
