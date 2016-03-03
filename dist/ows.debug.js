@@ -1,5 +1,5 @@
 /**
- * Custom version of Ows4js library (original version: https://github.com/OSGeo/ows.js)
+ * Custom I4D version of Ows4js library
  *
  * Changelog:
  * - 02/03/2016: Ows4js.Util.httpGet & Ows4js.Util.httpPost methods now use angular $http service
