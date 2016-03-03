@@ -1,3 +1,15 @@
+/**
+ * Custom version of Ows4js library (original version: https://github.com/OSGeo/ows.js)
+ *
+ * Changelog:
+ * - 02/03/2016: Ows4js.Util.httpGet & Ows4js.Util.httpPost methods now use angular $http service
+ * - 02/03/2016: added a Ows4js.Util.parseXML method (based on jQuery parseXML method) to handle plain text angular http response
+ * - 02/03/2016: added an optional resultType parameter in Ows4js.Csw.GetRecords method
+ *               that allows to override default 'results' value, e.g. by 'results_with_summary'
+ *
+ */
+
+
 var Ows4js = {};
 
 Ows4js.version = '0.1.2';
@@ -6,44 +18,74 @@ Ows4js.Ows = {};
 Ows4js.Fes = {};
 
 Ows4js.Proxy = '/cgi-bin/proxy.cgi?url=';
-Ows4js.Util = {};
+
 
 /**
  * Util functions
  * */
 
-Ows4js.Util.httpGet = function(url) {
-    var httpRequest;
-    try {
-        try {
-            httpRequest = new ActiveXObject('Microsoft.XMLHTTP');
-        } catch (e) {
-            httpRequest = new XMLHttpRequest();
-        }
-        httpRequest.open('GET', url, false);
-        httpRequest.send(null);
-        return httpRequest;
-    } catch (e) {
-        throw e;
+// get angular $http service
+var $http = angular.injector(['ng']).get('$http');
+
+Ows4js.Util = {};
+
+Ows4js.Util.parseXML = function(data) {
+    var xml, tmp;
+    if (!data || typeof data !== 'string') {
+        return null;
     }
+    try {
+        tmp = new DOMParser();
+        xml = tmp.parseFromString(data, 'text/xml');
+    }
+    catch (e) {
+        xml = undefined;
+    }
+    if (!xml || xml.getElementsByTagName('parsererror').length) {
+        throw new Error('Invalid XML: ' + data);
+    }
+    return xml;
 };
 
-Ows4js.Util.httpPost = function(url, lang, request, credentials) {
-    return new Promise(function(fulfill, reject){
-        var httpRequest = new XMLHttpRequest();
-        httpRequest.onreadystatechange=function() {
-            if (httpRequest.readyState==4 && httpRequest.status==200) {
-                console.log(request);
-                fulfill(httpRequest.responseXML);
-            }
-        };
-        httpRequest.open('POST', url, true);
-        httpRequest.setRequestHeader('Accept-Language',lang);
-        if (credentials != undefined && credentials.user != undefined && credentials.pass != undefined){
-            httpRequest.setRequestHeader("Authorization", "Basic " + btoa(credentials.user + ":" + credentials.pass));
-        }
-        httpRequest.send(request);
+Ows4js.Util.httpGet = function(url) {
+    return $http({
+        headers: { 'Accept': 'application/xml' },
+        method: 'GET',
+        transformResponse: function (data) {
+            return Ows4js.Util.parseXML(data);
+        },
+        url: url
     });
+};
+
+Ows4js.Util.httpPost = function(url, request, credentials) {
+    var headers = {
+        'Accept': 'application/xml',
+        'Content-Type': 'application/xml'
+    };
+    if (credentials && typeof credentials.user === 'string' && typeof credentials.pass === 'string') {
+        headers['Authorization'] = 'Basic ' + btoa(credentials.user + ':' + credentials.pass);
+    }
+    var promise = $http({
+        data: request,
+        headers: headers,
+        method: 'POST',
+        transformRequest: function (data) {
+            return data;
+        },
+        transformResponse: function (data) {
+            return Ows4js.Util.parseXML(data);
+        },
+        url: url
+    })
+        .then(function (response) {
+            return response.data;
+        })
+        .catch(function (error) {
+            console.log('Could not make POST request to ' + url + '. Error: ', error);
+        })
+    ;
+    return promise;
 };
 
 Ows4js.Util.buildUrl = function(url, params) {
@@ -74,13 +116,20 @@ Ows4js.Filter.prototype.PropertyName = function (propertyName){
 };
 
 // Comparison Operators
-Ows4js.Filter.prototype.isLike = function(value){
+Ows4js.Filter.prototype.isLike = function(value, options){
+    options = options || {};
+    var escapeChar = options.escapeChar || "";
+    var singleChar = options.singleChar || "_";
+    var wildCard = options.wildCard || "%";
+    var matchCase = options.matchCase || false;
+
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsLike' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsLikeType",
-            escapeChar: "",
-            singleChar: "_",
-            wildCard: "%",
+            escapeChar: escapeChar,
+            singleChar: singleChar,
+            wildCard: wildCard,
+            matchCase: matchCase,
             literal: {
                 TYPE_NAME: "Filter_1_1_0.LiteralType",
                 content: [value]
@@ -110,16 +159,22 @@ Ows4js.Filter.prototype.isBetween = function(lowerValue, upperValue){
                     content: this.tmp.PropertyName
                 }
             },
-            lowerBoundary:{
-                'ogc:Literal':{
-                    TYPE_NAME: "Filter_1_1_0.LiteralType",
-                    content :[lowerValue]
+            "lowerBoundary": {
+                TYPE_NAME: "Filter_1_1_0.LowerBoundaryType",
+                expression: {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [lowerValue]
+                    }
                 }
             },
-            upperBoundary:{
-                'ogc:Literal':{
-                    TYPE_NAME: "Filter_1_1_0.LiteralType",
-                    content :[upperValue]
+            "upperBoundary": {
+                TYPE_NAME: "Filter_1_1_0.UpperBoundaryType",
+                expression: {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [upperValue]
+                    }
                 }
             }
         }
@@ -129,18 +184,21 @@ Ows4js.Filter.prototype.isBetween = function(lowerValue, upperValue){
     return this;
 };
 
-Ows4js.Filter.prototype.isEqualTo = function(value){
+Ows4js.Filter.prototype.isEqualTo = function(value) {
     this['ogc:Filter'].comparisonOps = {
-        'ogc:PropertyIsEqualTo' : {
-            TYPE_NAME: "Filter_1_1_0.PropertyIsEqualTo",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+        "ogc:PropertyIsEqualTo": {
+            TYPE_NAME: "Filter_1_1_0.BinaryComparisonOpType",
+            expression: [{
+                "ogc:PropertyName": {
+                    TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                    content: this.tmp.PropertyName
+                }
+            }, {
+                "ogc:Literal": {
+                    TYPE_NAME: "Filter_1_1_0.LiteralType",
+                    content: [value]
+                }
+            }]
         }
     };
     // Delete the tmp property to prevent jsonix fail.
@@ -152,14 +210,20 @@ Ows4js.Filter.prototype.isLessThanOrEqualTo = function(value){
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsLessThanOrEqualTo' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsLessThanOrEqualTo",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+            expression : [
+                {
+                    'ogc:PropertyName': {
+                        TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                        content: this.tmp.PropertyName
+                    },
+                },
+                {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [value]
+                    }
+                }
+            ]
         }
     };
     // Delete the tmp property to prevent jsonix fail.
@@ -171,16 +235,23 @@ Ows4js.Filter.prototype.isGreaterThan = function(value){
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsGreaterThan' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsGreaterThan",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+            expression : [
+                {
+                    'ogc:PropertyName': {
+                        TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                        content: this.tmp.PropertyName
+                    },
+                },
+                {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [value]
+                    }
+                }
+            ]
         }
     };
+
     // Delete the tmp property to prevent jsonix fail.
     delete this.tmp;
     return this;
@@ -190,16 +261,23 @@ Ows4js.Filter.prototype.isLessThan = function(value){
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsLessThan' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsLessThan",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+            expression : [
+                {
+                    'ogc:PropertyName': {
+                        TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                        content: this.tmp.PropertyName
+                    },
+                },
+                {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [value]
+                    }
+                }
+            ]
         }
     };
+
     // Delete the tmp property to prevent jsonix fail.
     delete this.tmp;
     return this;
@@ -209,14 +287,20 @@ Ows4js.Filter.prototype.isGreaterThanOrEqualTo = function(value){
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsGreaterThanOrEqualTo' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsGreaterThanOrEqualTo",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+            expression : [
+                {
+                    'ogc:PropertyName': {
+                        TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                        content: this.tmp.PropertyName
+                    },
+                },
+                {
+                    "ogc:Literal": {
+                        TYPE_NAME: "Filter_1_1_0.LiteralType",
+                        content: [value]
+                    }
+                }
+            ]
         }
     };
     // Delete the tmp property to prevent jsonix fail.
@@ -228,14 +312,17 @@ Ows4js.Filter.prototype.isNotEqualTo = function(value){
     this['ogc:Filter'].comparisonOps = {
         'ogc:PropertyIsNotEqualTo' : {
             TYPE_NAME: "Filter_1_1_0.PropertyIsNotEqualTo",
-            literal: {
-                TYPE_NAME: "Filter_1_1_0.LiteralType",
-                content: [value]
-            },
-            propertyName: {
-                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
-            }
+            expression: [{
+                "ogc:PropertyName": {
+                    TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                    content: this.tmp.PropertyName
+                }
+            }, {
+                "ogc:Literal": {
+                    TYPE_NAME: "Filter_1_1_0.LiteralType",
+                    content: [value]
+                }
+            }]
         }
     };
     // Delete the tmp property to prevent jsonix fail.
@@ -416,6 +503,7 @@ Ows4js.Filter.prototype.getBasicFilterFromXML = function(xml){
     var unmarshaller = Ows4js.Filter.JsonixContext.createUnmarshaller();
     return unmarshaller.unmarshalDocument(xml);
 };
+
 /**
  * Jsonix CSW unmarshaller
  *
@@ -463,7 +551,7 @@ Ows4js.Csw.prototype.GetCapabilities = function(){
     // XML to Post.
     var myXML = Ows4js.Csw.marshalDocument(getCapabilities);
     var me = this;
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         var capabilities;
         capabilities = Ows4js.Csw.unmarshalDocument(responseXML);
         console.log(capabilities);
@@ -479,9 +567,10 @@ Ows4js.Csw.prototype.GetCapabilities = function(){
 /**
  * Operation name: GetRecords
  *
+ *  MODIFIED 02/03/2016: added an optional resultType param passed to Ows4js.Csw.GetRecords constructor
  * */
 
-Ows4js.Csw.prototype.GetRecords = function(startPosition, maxRecords, filter, outputSchema) {
+Ows4js.Csw.prototype.GetRecords = function(startPosition, maxRecords, filter, outputSchema, resultType) {
 
     var query;
     if (filter === undefined || filter === null) {
@@ -491,13 +580,13 @@ Ows4js.Csw.prototype.GetRecords = function(startPosition, maxRecords, filter, ou
         query = new Ows4js.Csw.Query('full', new Ows4js.Csw.Constraint(filter));
     }
     // Create de GetRecords Action.
-    var recordAction = new Ows4js.Csw.GetRecords(startPosition, maxRecords, query, outputSchema);
+    var recordAction = new Ows4js.Csw.GetRecords(startPosition, maxRecords, query, outputSchema, resultType);
     // XML to Post.
     var myXML = Ows4js.Csw.marshalDocument(recordAction);
     console.log(recordAction);
     console.log(myXML);
     // Post XML
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         console.log(responseXML);
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
@@ -534,7 +623,7 @@ Ows4js.Csw.prototype.GetRecordById = function(id_list) {
     //console.log(byIdAction);
     var myXML = Ows4js.Csw.marshalDocument(byIdAction);
     //console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -553,7 +642,7 @@ Ows4js.Csw.prototype.GetDomain = function(propertyName){
     var getdomainAction = new Ows4js.Csw.GetDomain(propertyName);
     var myXML = Ows4js.Csw.marshalDocument(getdomainAction);
     //console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -568,7 +657,7 @@ Ows4js.Csw.prototype.insertRecords = function (records){
     console.log(transaction);
     var myXML = Ows4js.Csw.marshalDocument(transaction);
     console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -583,7 +672,7 @@ Ows4js.Csw.prototype.updateRecord = function(records){
     console.log(transaction);
     var myXML = Ows4js.Csw.marshalDocument(transaction);
     console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -596,7 +685,7 @@ Ows4js.Csw.prototype.deleteRecords = function(filter){
     var transaction = new Ows4js.Csw.Transaction(transactionAction);
     var myXML = Ows4js.Csw.marshalDocument(transaction);
     console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, "application/xml", myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -619,15 +708,17 @@ Ows4js.Csw.Constraint = function(filter){
  * GetRecords Request Template
  *
  * This Objects already use the simple mapping style from jsonix
+ *
+ * MODIFIED 02/03/2016: added an optional resultType param that allows to override default 'results' value
  * */
 
-Ows4js.Csw.GetRecords = function(startPosition, maxRecords, query, outputSchema){
+Ows4js.Csw.GetRecords = function(startPosition, maxRecords, query, outputSchema, resultType){
     this['csw:GetRecords'] = {
         TYPE_NAME: "CSW_2_0_2.GetRecordsType",
         abstractQuery: query,
         startPosition: startPosition,
         maxRecords: maxRecords,
-        resultType: "results",
+        resultType: typeof resultType === 'string' && /^results/.test(resultType) ? resultType : 'results',
         service: "CSW",
         version: "2.0.2"
     };
