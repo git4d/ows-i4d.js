@@ -1,13 +1,12 @@
 {
-    "name": "ows.js",
+    "name": "ows-i4d.js",
     "version": "0.1.2",
-    "homepage": "https://github.com/OSGeo/ows.js",
+    "homepage": "https://github.com/git4d/ows.js",
     "authors": [
-        "Juan Manuel Vicente <juanma.v82@gmail.com>",
-        "Tom Kralidis <tomkralidis@gmail.com>"
+        "David Daignan"
     ],
-    "description": "OGC Web Services Library for JavaScript.",
-    "main": "dist/ows.min.js",
+    "description": "Custom version of OGC Web Services Library for JavaScript.",
+    "main": "dist/ows.debug.js",
     "keywords": [
         "ows",
         "csw",
