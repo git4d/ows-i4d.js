@@ -1,8 +1,8 @@
 {
-  "name": "ows.js",
-  "version": "0.1.1",
+  "name": "ows-i4d.js",
+  "version": "0.1.5",
   "description": "OGC Web Services Library for JavaScript",
-  "homepage": "https://github.com/OSGeo/ows.js",
+  "homepage": "https://github.com/git4d/ows-i4d.js",
   "author": "Tom Kralidis",
   "keywords": [
     "ogc",
@@ -36,7 +36,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/OSGeo/ows.js.git"
+    "url": "git://github.com/git4d/ows-i4d.js.git"
   },
   "directories": {},
   "scripts": {
@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "jsonix": "2.3.2",
-    "ogc-schemas": "2.5.1",
+    "ogc-schemas-i4d": "2.5.1",
     "w3c-schemas": "1.3.1"
   },
   "devDependencies": {
