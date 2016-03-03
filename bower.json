@@ -19,7 +19,8 @@
     "dependencies": {
         "jsonix": "2.3.2",
         "ogc-schemas": "2.5.1",
-        "w3c-schemas": "1.3.1"
+        "w3c-schemas": "1.3.1",
+        "angular": ">=1.4.x"
     },
     "license": "MIT",
     "ignore": [
