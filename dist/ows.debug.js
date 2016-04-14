@@ -23,69 +23,31 @@ Ows4js.Proxy = '/cgi-bin/proxy.cgi?url=';
 /**
  * Util functions
  * */
-
-// get angular $http service
-var $http = angular.injector(['ng']).get('$http');
-
 Ows4js.Util = {};
 
-Ows4js.Util.parseXML = function(data) {
-    var xml, tmp;
-    if (!data || typeof data !== 'string') {
-        return null;
-    }
-    try {
-        tmp = new DOMParser();
-        xml = tmp.parseFromString(data, 'text/xml');
-    }
-    catch (e) {
-        xml = undefined;
-    }
-    if (!xml || xml.getElementsByTagName('parsererror').length) {
-        throw new Error('Invalid XML: ' + data);
-    }
-    return xml;
-};
-
-Ows4js.Util.httpGet = function(url) {
-    return $http({
-        headers: { 'Accept': 'application/xml' },
+Ows4js.Util.httpGet = function(url, headers) {
+    return $.ajax({
+        headers: $.extend({ 'Accept': 'application/xml' }, headers),
         method: 'GET',
-        transformResponse: function (data) {
-            return Ows4js.Util.parseXML(data);
-        },
         url: url
     });
 };
 
-Ows4js.Util.httpPost = function(url, request, credentials) {
-    var headers = {
+Ows4js.Util.httpPost = function(url, request, headers, credentials) {
+    headers = $.extend({
         'Accept': 'application/xml',
         'Content-Type': 'application/xml'
-    };
+    }, headers);
     if (credentials && typeof credentials.user === 'string' && typeof credentials.pass === 'string') {
         headers['Authorization'] = 'Basic ' + btoa(credentials.user + ':' + credentials.pass);
     }
-    var promise = $http({
+    return $.ajax({
         data: request,
         headers: headers,
         method: 'POST',
-        transformRequest: function (data) {
-            return data;
-        },
-        transformResponse: function (data) {
-            return Ows4js.Util.parseXML(data);
-        },
+        processData: false,
         url: url
-    })
-        .then(function (response) {
-            return response.data;
-        })
-        .catch(function (error) {
-            console.log('Could not make POST request to ' + url + '. Error: ', error);
-        })
-    ;
-    return promise;
+    });
 };
 
 Ows4js.Util.buildUrl = function(url, params) {
@@ -100,11 +62,11 @@ Ows4js.Util.buildUrl = function(url, params) {
 };
 Ows4js.Filter= {};
 
-Ows4js.Filter = function(){
+Ows4js.Filter = function(config) {
     this['ogc:Filter'] = {
         TYPE_NAME : "Filter_1_1_0.FilterType"
     };
-
+    Ows4js.Filter.JsonixContext = new Jsonix.Context(config.schemas, { namespacePrefixes: config.namespaces, mappingStyle: config.mappingStyle });
 };
 
 Ows4js.Filter.prototype.PropertyName = function (propertyName){
@@ -136,7 +98,7 @@ Ows4js.Filter.prototype.isLike = function(value, options){
             },
             propertyName: {
                 TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                content: this.tmp.PropertyName
+                content: [this.tmp.PropertyName]
             }
         }
     };
@@ -156,7 +118,7 @@ Ows4js.Filter.prototype.isBetween = function(lowerValue, upperValue){
             expression :{
                 'ogc:PropertyName': {
                     TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                    content: this.tmp.PropertyName
+                    content: [this.tmp.PropertyName]
                 }
             },
             "lowerBoundary": {
@@ -191,7 +153,7 @@ Ows4js.Filter.prototype.isEqualTo = function(value) {
             expression: [{
                 "ogc:PropertyName": {
                     TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                    content: this.tmp.PropertyName
+                    content: [this.tmp.PropertyName]
                 }
             }, {
                 "ogc:Literal": {
@@ -214,7 +176,7 @@ Ows4js.Filter.prototype.isLessThanOrEqualTo = function(value){
                 {
                     'ogc:PropertyName': {
                         TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                        content: this.tmp.PropertyName
+                        content: [this.tmp.PropertyName]
                     },
                 },
                 {
@@ -239,7 +201,7 @@ Ows4js.Filter.prototype.isGreaterThan = function(value){
                 {
                     'ogc:PropertyName': {
                         TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                        content: this.tmp.PropertyName
+                        content: [this.tmp.PropertyName]
                     },
                 },
                 {
@@ -265,7 +227,7 @@ Ows4js.Filter.prototype.isLessThan = function(value){
                 {
                     'ogc:PropertyName': {
                         TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                        content: this.tmp.PropertyName
+                        content: [this.tmp.PropertyName]
                     },
                 },
                 {
@@ -291,7 +253,7 @@ Ows4js.Filter.prototype.isGreaterThanOrEqualTo = function(value){
                 {
                     'ogc:PropertyName': {
                         TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                        content: this.tmp.PropertyName
+                        content: [this.tmp.PropertyName]
                     },
                 },
                 {
@@ -315,7 +277,7 @@ Ows4js.Filter.prototype.isNotEqualTo = function(value){
             expression: [{
                 "ogc:PropertyName": {
                     TYPE_NAME: "Filter_1_1_0.PropertyNameType",
-                    content: this.tmp.PropertyName
+                    content: [this.tmp.PropertyName]
                 }
             }, {
                 "ogc:Literal": {
@@ -465,28 +427,6 @@ Ows4js.Filter.prototype.BBOX = function(llat, llon, ulat, ulon, srsName) {
     return this;
 };
 
-// TODO check the dependencies. Maybe the dependencies must passed through the constructor?
-Ows4js.Filter.JsonixContext = new Jsonix.Context(
-    [
-        OWS_1_0_0,
-        DC_1_1,
-        DCT,
-        XLink_1_0,
-        SMIL_2_0,
-        SMIL_2_0_Language,
-        GML_3_1_1,
-        Filter_1_1_0,
-        CSW_2_0_2
-    ],
-    {
-        namespacePrefixes: {
-            'http://www.opengis.net/cat/csw/2.0.2': 'csw',
-            "http://www.opengis.net/ogc": 'ogc',
-            "http://www.opengis.net/gml": "gml"
-        },
-        mappingStyle : 'simplified'
-    });
-
 Ows4js.Filter.prototype.getXML = function(){
     var doc;
     var marshaller= Ows4js.Filter.JsonixContext.createMarshaller();
@@ -511,19 +451,28 @@ Ows4js.Filter.prototype.getBasicFilterFromXML = function(xml){
 
 Ows4js.Csw ={};
 
+/**
+ * [Csw description]
+ * @param {[type]} url    [description]
+ * @param {[type]} config [description]
+ */
 Ows4js.Csw = function(url, config) {
     this.version = '2.0.2';
-    /**
-     * Jsonix Configuration
-     * */
-    if (config == null){
-        throw 'Missing Configuration! It is a must to CSW to know the profile';
-    } else if (config[2] != undefined){
-        this.credentials = config[2];
-    }
-    Ows4js.Csw.jsonnixContext = new Jsonix.Context(config[0], config[1]);
-    // init by doing a GetCapabilities and parsing metadata
     this.url = url;
+    // lib config
+    if (config === null || typeof config !== 'object') {
+        throw 'Missing Configuration! It is a must to CSW to know the profile';
+    }
+    this.config = $.extend({
+        httpHeaders: {},
+        proxy:       false
+    }, config);
+    // jsonix config
+    Ows4js.Csw.JsonixContext = new Jsonix.Context(config.schemas, {
+        namespacePrefixes: config.namespaces,
+        mappingStyle: config.mappingStyle
+    });
+    this.GetCapabilities();
 };
 
 /**
@@ -547,20 +496,33 @@ Ows4js.Csw = function(url, config) {
  */
 
 Ows4js.Csw.prototype.GetCapabilities = function(){
-    var getCapabilities = new Ows4js.Csw.GetCapabilities();
-    // XML to Post.
-    var myXML = Ows4js.Csw.marshalDocument(getCapabilities);
-    var me = this;
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
-        var capabilities;
-        capabilities = Ows4js.Csw.unmarshalDocument(responseXML);
-        console.log(capabilities);
-        me.serviceIdentification = capabilities['csw:Capabilities'].serviceIdentification;
-        me.serviceProvider = capabilities['csw:Capabilities'].serviceProvider;
-        me.operationsMetadata = capabilities['csw:Capabilities'].operationsMetadata;
-        me.filterCapabilities = capabilities['csw:Capabilities'].filterCapabilities;
-        return me;
-    });
+    var self = this;
+    var capabilitiesAction = new Ows4js.Csw.GetCapabilities();
+    var myXML = Ows4js.Csw.marshalDocument(capabilitiesAction);
+    var promise = Ows4js.Util.httpPost(this.url, myXML, this.config.httpHeaders, this.credentials).then(
+        function(responseXML){
+            return handleResponseXML(responseXML);
+        },
+        function(error) {
+            if (error.status === 405) {
+                console.log('POST GetCapabilities failed, try GET...');
+                promise = Ows4js.Util.httpGet(self.url, self.config.httpHeaders).then(function(responseXML) {
+                    return handleResponseXML(responseXML);
+                });
+            }
+        }
+    );
+    return promise;
+
+    function handleResponseXML(xml) {
+        var capabilities = Ows4js.Csw.unmarshalDocument(xml);
+        console.log('GetCapabilities response', capabilities);
+        self.serviceIdentification = capabilities['csw:Capabilities'].serviceIdentification;
+        self.serviceProvider = capabilities['csw:Capabilities'].serviceProvider;
+        self.operationsMetadata = capabilities['csw:Capabilities'].operationsMetadata;
+        self.filterCapabilities = capabilities['csw:Capabilities'].filterCapabilities;
+        return self;
+    }
 };
 
 
@@ -571,34 +533,40 @@ Ows4js.Csw.prototype.GetCapabilities = function(){
  * */
 
 Ows4js.Csw.prototype.GetRecords = function(startPosition, maxRecords, filter, outputSchema, resultType) {
-
     var query;
-    if (filter === undefined || filter === null) {
-        query = new Ows4js.Csw.Query('full');
-    } else {
-        // Create Query
+    if (filter instanceof Ows4js.Filter) {
         query = new Ows4js.Csw.Query('full', new Ows4js.Csw.Constraint(filter));
     }
-    // Create de GetRecords Action.
+    else {
+        query = new Ows4js.Csw.Query('full');
+    }
+    // build XML request
     var recordAction = new Ows4js.Csw.GetRecords(startPosition, maxRecords, query, outputSchema, resultType);
-    // XML to Post.
     var myXML = Ows4js.Csw.marshalDocument(recordAction);
-    console.log(recordAction);
-    console.log(myXML);
-    // Post XML
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
-        console.log(responseXML);
-        return Ows4js.Csw.unmarshalDocument(responseXML);
+    // determine requested url
+    var url = this.url;
+    var operation = this.getOperationByName('GetRecords');
+    if (operation) {
+        // get operation url
+        url = operation.dcp[0].http.getOrPost[1]['ows:Post'].href;
+        // request is proxied: keep only '/csw*'' fragment
+        if (this.config.proxy) {
+            url = '/' + /^https?:\/\/.+\/[a-z]*(csw.*)$/i.exec(url)[1];
+        }
+    }
+    return Ows4js.Util.httpPost(url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML) {
+        var records = Ows4js.Csw.unmarshalDocument(responseXML);
+        console.log('GetRecords response', records);
+        return records;
     });
-
 };
 
 Ows4js.Csw.marshalDocument = function(object){
-    return Ows4js.Csw.jsonnixContext.createMarshaller().marshalDocument(object);
+    return Ows4js.Csw.JsonixContext.createMarshaller().marshalDocument(object);
 };
 
 Ows4js.Csw.unmarshalDocument = function(xml){
-    return Ows4js.Csw.jsonnixContext.createUnmarshaller().unmarshalDocument(xml);
+    return Ows4js.Csw.JsonixContext.createUnmarshaller().unmarshalDocument(xml);
 };
 
 // To simplify de API.
@@ -611,7 +579,7 @@ Ows4js.Csw.objectToXML = function(object){
 };
 
 Ows4js.Csw.unmarshalString = function(string){
-    return Ows4js.Csw.jsonnixContext.createUnmarshaller().unmarshalString(string);
+    return Ows4js.Csw.JsonixContext.createUnmarshaller().unmarshalString(string);
 };
 
 /**
@@ -623,13 +591,16 @@ Ows4js.Csw.prototype.GetRecordById = function(id_list) {
     //console.log(byIdAction);
     var myXML = Ows4js.Csw.marshalDocument(byIdAction);
     //console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
 
 Ows4js.Csw.prototype.getOperationByName = function(name) {
-    return  this.operationsMetadata.operation.filter(function(element){
+    if (!this.operationsMetadata) {
+        return false
+    }
+    return this.operationsMetadata.operation.filter(function(element){
         return element.name === name;
     })[0];
 };
@@ -642,7 +613,7 @@ Ows4js.Csw.prototype.GetDomain = function(propertyName){
     var getdomainAction = new Ows4js.Csw.GetDomain(propertyName);
     var myXML = Ows4js.Csw.marshalDocument(getdomainAction);
     //console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -657,7 +628,7 @@ Ows4js.Csw.prototype.insertRecords = function (records){
     console.log(transaction);
     var myXML = Ows4js.Csw.marshalDocument(transaction);
     console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
@@ -685,7 +656,7 @@ Ows4js.Csw.prototype.deleteRecords = function(filter){
     var transaction = new Ows4js.Csw.Transaction(transactionAction);
     var myXML = Ows4js.Csw.marshalDocument(transaction);
     console.log(myXML);
-    return Ows4js.Util.httpPost(this.url, myXML, this.credentials).then(function(responseXML){
+    return Ows4js.Util.httpPost(this.url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML){
         return Ows4js.Csw.unmarshalDocument(responseXML);
     });
 };
