@@ -552,6 +552,8 @@ Ows4js.Csw.prototype.GetRecords = function(startPosition, maxRecords, filter, ou
         // request is proxied: keep only '/csw*'' fragment
         if (this.config.proxy) {
             url = '/' + /^https?:\/\/.+\/[a-z]*(csw.*)$/i.exec(url)[1];
+            // then append it to the proxy base
+            url = this.config.proxyBase + url;
         }
     }
     return Ows4js.Util.httpPost(url, myXML, this.config.httpHeaders, this.credentials).then(function(responseXML) {
