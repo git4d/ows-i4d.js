@@ -320,6 +320,39 @@ Ows4js.Filter.prototype.BBOX = function(llat, llon, ulat, ulon, srsName) {
     return this;
 };
 
+Ows4js.Filter.prototype.Intersects = function(polygonCoordinateList, srsName) {
+    this['ogc:Filter'].spatialOps = {
+        'ogc:Intersects' : {
+            TYPE_NAME: "Filter_1_1_0.IntersectsType",
+            geometry :{
+                'gml:Polygon' : {
+                    TYPE_NAME: "GML_3_1_1.PolygonType",
+                    exterior: {
+                        'gml:exterior': {
+                            TYPE_NAME: "GML_3_1_1.AbstractRingPropertyType",
+                            ring: {
+                                'gml:LinearRing': {
+                                    TYPE_NAME: "GML_3_1_1.LinearRingType",
+                                    posList: {
+                                        TYPE_NAME: "GML_3_1_1.DirectPositionListType",
+                                        value: polygonCoordinateList
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    srsName: srsName
+                }
+            },
+            propertyName1 :{
+                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                content: ["ows:BoundingBox"]
+            }
+        }
+    };
+    return this;
+};
+
 // TODO check the dependencies. Maybe the dependencies must passed through the constructor?
 Ows4js.Filter.JsonixContext = new Jsonix.Context(
     [
