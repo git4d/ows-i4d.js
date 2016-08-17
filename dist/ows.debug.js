@@ -50,6 +50,47 @@ Ows4js.Util.httpPost = function(url, request, headers, credentials) {
     });
 };
 
+/*Ows4js.Util.httpGet = function(url, headers) {
+    var promise = $http({
+        headers: angular.extend({ 'Accept': 'application/xml' }, headers),
+        method: 'GET',
+        transformResponse: function (data) {
+            return Ows4js.Util.parseXML(data);
+        },
+        url: url
+    })
+    .then(function(response) {
+        return response.data;
+    });
+    return promise;
+};
+
+Ows4js.Util.httpPost = function(url, request, headers, credentials) {
+    var _headers = {
+        'Accept': 'application/xml',
+        'Content-Type': 'application/xml'
+    };
+    if (credentials && typeof credentials.user === 'string' && typeof credentials.pass === 'string') {
+        _headers['Authorization'] = 'Basic ' + btoa(credentials.user + ':' + credentials.pass);
+    }
+    var promise = $http({
+        data: request,
+        headers: angular.extend(_headers, headers || {}),
+        method: 'POST',
+        transformRequest: function (data) {
+            return data;
+        },
+        transformResponse: function (data) {
+            return Ows4js.Util.parseXML(data);
+        },
+        url: url
+    })
+    .then(function (response) {
+        return response.data;
+    });
+    return promise;
+};*/
+
 Ows4js.Util.buildUrl = function(url, params) {
     var kvps = [];
 
@@ -421,6 +462,39 @@ Ows4js.Filter.prototype.BBOX = function(llat, llon, ulat, ulon, srsName) {
             propertyName :{
                 TYPE_NAME: "Filter_1_1_0.PropertyNameType",
                 content: "ows:BoundingBox"
+            }
+        }
+    };
+    return this;
+};
+
+Ows4js.Filter.prototype.Intersects = function(polygonCoordinateList, srsName) {
+    this['ogc:Filter'].spatialOps = {
+        'ogc:Intersects' : {
+            TYPE_NAME: "Filter_1_1_0.IntersectsType",
+            geometry :{
+                'gml:Polygon' : {
+                    TYPE_NAME: "GML_3_1_1.PolygonType",
+                    exterior: {
+                        'gml:exterior': {
+                            TYPE_NAME: "GML_3_1_1.AbstractRingPropertyType",
+                            ring: {
+                                'gml:LinearRing': {
+                                    TYPE_NAME: "GML_3_1_1.LinearRingType",
+                                    posList: {
+                                        TYPE_NAME: "GML_3_1_1.DirectPositionListType",
+                                        value: polygonCoordinateList
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    srsName: srsName
+                }
+            },
+            propertyName1 :{
+                TYPE_NAME: "Filter_1_1_0.PropertyNameType",
+                content: ["ows:BoundingBox"]
             }
         }
     };
